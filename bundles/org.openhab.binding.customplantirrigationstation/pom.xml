@@ -14,4 +14,25 @@
 
   <name>openHAB Add-ons :: Bundles :: CustomPlantIrrigationStation Binding</name>
 
+  <dependencies>
+    <!-- include Pi4J API & Runtime (Core) -->
+    <dependency>
+      <groupId>com.pi4j</groupId>
+      <artifactId>pi4j-core</artifactId>
+      <version>2.1.1</version>
+    </dependency>
+
+    <!-- include Pi4J Plugins (Platforms and I/O Providers) -->
+    <dependency>
+      <groupId>com.pi4j</groupId>
+      <artifactId>pi4j-plugin-raspberrypi</artifactId>
+      <version>2.1.1</version>
+    </dependency>
+    <dependency>
+      <groupId>com.pi4j</groupId>
+      <artifactId>pi4j-plugin-pigpio</artifactId>
+      <version>2.1.1</version>
+    </dependency>
+  </dependencies>
+
 </project>
