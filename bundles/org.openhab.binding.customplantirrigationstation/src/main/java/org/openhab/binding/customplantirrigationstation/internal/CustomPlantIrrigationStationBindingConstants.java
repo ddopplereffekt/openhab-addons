@@ -27,8 +27,13 @@ public class CustomPlantIrrigationStationBindingConstants {
     private static final String BINDING_ID = "customplantirrigationstation";
 
     // List of all Thing Type UIDs
-    public static final ThingTypeUID THING_TYPE_SAMPLE = new ThingTypeUID(BINDING_ID, "sample");
+    public static final ThingTypeUID THING_TYPE_CUSTOM_IRRIGATION_SYSTEM = new ThingTypeUID(BINDING_ID, "custom-irrigation-system");
+    public static final ThingTypeUID THING_TYPE_SUPERVISED_PLANT = new ThingTypeUID(BINDING_ID, "supervised-plant");
 
     // List of all Channel ids
-    public static final String CHANNEL_1 = "channel1";
+    public static final String CHANNEL_WATER_LEVEL = "water-level";
+    public static final String CHANNEL_REFERENCE_EARTH_MOISTURE = "reference-earth-moisture";
+    public static final String CHANNEL_EARTH_MOISTURE = "earth-moisture";
+    public static final String CHANNEL_IRRIGATION = "irrigation";
+    public static final String CHANNEL_PLANT_LOCATION = "plant-location";
 }

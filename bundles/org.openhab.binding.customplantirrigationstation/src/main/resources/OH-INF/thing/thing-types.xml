@@ -4,13 +4,157 @@
 	xmlns:thing="https://openhab.org/schemas/thing-description/v1.0.0"
 	xsi:schemaLocation="https://openhab.org/schemas/thing-description/v1.0.0 https://openhab.org/schemas/thing-description-1.0.0.xsd">
 
-	<!-- Sample Thing Type -->
+
+
+	<!-- Custom Irrigation System Bridge -->
+	<bridge-type id="custom-irrigation-system">
+		<label>Custom Irrigation System</label>
+		<description>The Custom Irrigation System.</description>
+
+		<channels>
+			<channel id="water-level" typeId="water-level-channel"/>
+		</channels>
+	</bridge-type>
+
+
+
+	<!-- Plant Thing Type -->
+	<thing-type id="supervised-plant">
+		<supported-bridge-type-refs>
+			<bridge-type-ref id="custom-irrigation-system"/>
+		</supported-bridge-type-refs>
+
+		<label>CustomPlantIrrigationStation Supervised Plant</label>
+		<description>A Supervised Plant.</description>
+
+		<channel>
+			<channel id="reference-earth-moisture" typeId="reference-earth-moisture-channel"/>
+			<channel id="earth-moisture" typeId="earth-moisture-channel"/>
+			<channel id="irrigation" typeId="irrigation-channel"/>
+			<channel id="plant-location" typeId="plant-location-channel"/>
+		</channel>
+
+		<config-description>
+			<parameter name="location" type="integer" required="true">
+				<context>plant-location</context>
+				<label>Location</label>
+				<description>Integer which categorizes the location of the plant (see README.md file).</description>
+			</parameter>
+
+			<parameter name="name" type="text" required="true">
+				<context>name</context>
+				<label>Name</label>
+				<description>The name of the plant.</description>
+			</parameter>
+
+			<parameter name="waterQuantity" type="integer" unit="s" min="1">
+				<context>water-Quantity</context>
+				<label>Quantity of water</label>
+				<description>
+					The amount of water a plant will receive for one irrigation. Measured via the pumping time in seconds.
+				</description>
+				<default>5</default>
+			</parameter>
+		</config-description>
+	</thing-type>
+
+
+
+	<channel-type id="water-level-channel">
+		<item-type>Number</item-type>
+		<label>Water Tank Level</label><!-- Use uppercase words, except prepositions. 2-3 words, max 25 chars -->
+		<description>This channel shows the amount of water in the tank of the custom irrigation system.</description>
+		<category>Water</category>
+		<tags>
+			<tag>Water</tag>
+		</tags>
+		<state readOnly="true">
+		</state>
+	</channel-type>
+
+
+
+	<channel-type id="reference-earth-moisture-channel">
+		<item-type>String</item-type>
+		<label>Set Moisture Reference</label><!-- Use uppercase words, except prepositions. 2-3 words, max 25 chars -->
+		<description>This channel is to give a command for the system to meassure the reference value for irrigated or dry soil of the corresponding plant.</description>
+		<tags>
+			<tag>Control</tag>
+		</tags>
+		<state readOnly="true">
+			<options>
+				<option value="not_referenced">Not referenced</option>
+				<option value="referenced">Referenced</option>
+			</options>
+		</state>
+		<command>
+			<options>
+				<option value="meassure_reference_4_dry_soil">Meassure the reference value for dry soil.</option>
+				<option value="meassure_reference_4_wet_soil">Meassure the reference value for irrigated soil.</option>
+			</options>
+		</command>
+	</channel-type>
+
+
+
+	<channel-type id="earth-moisture-channel">
+		<item-type>Number</item-type>
+		<label>Meassure Soil Moisture</label><!-- Use uppercase words, except prepositions. 2-3 words, max 25 chars -->
+		<description>This channel is to give a command for the system to meassure the moisture of the soil and to display the meassured value for the corresponding plant.</description>
+		<category>Moisture</category>
+		<tags>
+			<tag>Control</tag>
+			<tag>Measurement</tag>
+		</tags>
+		<state readOnly="true">
+		</state>
+		<command>
+			<options>
+				<option value="meassure_soil_moisture">Meassure the moisture of the soil.</option>
+			</options>
+		</command>
+	</channel-type>
+
+
+
+	<channel-type id="irrigation-channel">
+		<item-type>Switch</item-type>
+		<label>Irrigation Command</label><!-- Use uppercase words, except prepositions. 2-3 words, max 25 chars -->
+		<description>This channel is to give a command for the irrigation of the corresponding plant.</description>
+		<category>Switch</category>
+		<tags>
+			<tag>Control</tag>
+		</tags>
+		<state readOnly="true">
+		</state>
+		<command>
+			<options>
+				<option value="irrigate">Irrigate the plant.</option>
+			</options>
+		</command>
+	</channel-type>
+
+
+
+	<channel-type id="plant-location-channel">
+		<item-type>Number</item-type>
+		<label>Location of Plant</label><!-- Use uppercase words, except prepositions. 2-3 words, max 25 chars -->
+		<description>This channel is to set and display the location of the corresponding plant.</description>
+		<tags>
+			<tag>Control</tag>
+		</tags>
+		<state step="1" readOnly="false">
+		</state>
+	</channel-type>
+
+</thing:thing-descriptions>
+
+
+<!--
 	<thing-type id="sample">
-		<!-- Comment this in for Things which need a Bridge to function.
-			<supported-bridge-type-refs>
+		<supported-bridge-type-refs>
 			<bridge-type-ref id="CustomPlantIrrigationStationBridge" />
-			</supported-bridge-type-refs>
-		-->
+		</supported-bridge-type-refs>
 
 		<label>CustomPlantIrrigationStation Binding Thing</label>
 		<description>Sample thing for CustomPlantIrrigationStation Binding</description>
@@ -39,10 +183,10 @@
 		</config-description>
 	</thing-type>
 
-	<!-- Sample Channel Type -->
+
 	<channel-type id="sample-channel">
 		<item-type>Number:Temperature</item-type>
-		<label>Example Temperature</label><!-- Use uppercase words, except prepositions. 2-3 words, max 25 chars -->
+		<label>Example Temperature</label>
 		<description>Sample channel for CustomPlantIrrigationStation Binding</description>
 	</channel-type>
-</thing:thing-descriptions>
+-->

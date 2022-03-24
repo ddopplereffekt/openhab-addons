@@ -10,7 +10,7 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-package org.openhab.binding.customplantirrigationstation.internal;
+package org.openhab.binding.customplantirrigationstation.internal.config;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 
@@ -22,10 +22,4 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 @NonNullByDefault
 public class CustomPlantIrrigationStationConfiguration {
 
-    /**
-     * Sample configuration parameters. Replace with your own.
-     */
-    public String hostname = "";
-    public String password = "";
-    public int refreshInterval = 600;
 }

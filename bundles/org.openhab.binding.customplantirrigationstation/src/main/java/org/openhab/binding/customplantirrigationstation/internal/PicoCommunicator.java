@@ -2,6 +2,8 @@ package org.openhab.binding.customplantirrigationstation.internal;
 
 import java.nio.ByteBuffer;
 
+import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.eclipse.jdt.annotation.Nullable;
 import com.pi4j.Pi4J;
 import com.pi4j.context.Context;
 import com.pi4j.exception.ShutdownException;
@@ -23,9 +25,10 @@ import org.openhab.binding.customplantirrigationstation.internal.exceptions.UART
  *
  * @author Philip Hirschle - Initial Contribution
  */
+@NonNullByDefault
 final class UARTConnection {
     // the singleton instance
-    private volatile static UARTConnection instance;
+    private @Nullable volatile static UARTConnection instance;
 
 
     /**
@@ -46,9 +49,9 @@ final class UARTConnection {
     }
 
 
-    private final Context pi4j;
-    private final SerialConfig configuration;
-    private final SerialProvider ioProvider;
+    private final @Nullable Context pi4j;
+    private final @Nullable SerialConfig configuration;
+    private final @Nullable SerialProvider ioProvider;
 
 
     /**
@@ -82,7 +85,6 @@ final class UARTConnection {
      * @param data This is the message to be sent.
      * @return The message which was received.
      */
-    @SuppressWarnings("usy-waiting")
     ByteBuffer communicate(char data) {
         ByteBuffer result;
         try (Serial serialConnection = this.ioProvider.create(configuration)) {
@@ -113,7 +115,7 @@ final class UARTConnection {
 
 
     /**
-     * This method has to be called befor the programm closes to shut down and clean up the serial connection.
+     * This method has to be called before the program closes to shut down and clean up the serial connection.
      */
     void closeConnection() {
         try {
@@ -130,6 +132,7 @@ final class UARTConnection {
  *
  * @author Philip Hirschle - Initial Contribution
  */
+@NonNullByDefault
 public final class PicoCommunicator {
 
 
@@ -156,19 +159,19 @@ public final class PicoCommunicator {
     }
 
 
-    ByteBuffer sendReceive (int nachrichtTyp) throws UARTConnectionBuildupFailure {
+    static ByteBuffer sendReceive (int nachrichtTyp) throws UARTConnectionBuildupFailure {
         return UARTConnection.getInstance().communicate((getCommunicationMessage(nachrichtTyp)));
     }
 
 
-    void cleanup() throws UARTConnectionBuildupFailure {
+    static void cleanup() throws UARTConnectionBuildupFailure {
         UARTConnection.getInstance().closeConnection();
     }
 }
 
 
 /*
-Pinlayout of Raspberry Pi 4b:
+Pin layout of Raspberry Pi 4b:
 
         3V3                  (1)  (2)                5V
         GPIO2 ; I2C Data     (3)  (4)                5V
