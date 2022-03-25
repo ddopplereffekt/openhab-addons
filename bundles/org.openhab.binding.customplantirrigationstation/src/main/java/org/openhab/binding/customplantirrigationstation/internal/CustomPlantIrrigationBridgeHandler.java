@@ -12,35 +12,49 @@
  */
 package org.openhab.binding.customplantirrigationstation.internal;
 
-import static org.openhab.binding.customplantirrigationstation.internal.CustomPlantIrrigationStationBindingConstants.*;
-
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
-import org.openhab.core.thing.ChannelUID;
-import org.openhab.core.thing.Thing;
-import org.openhab.core.thing.ThingStatus;
-import org.openhab.core.thing.binding.BaseThingHandler;
+import org.openhab.core.thing.*;
+import org.openhab.core.thing.binding.BaseBridgeHandler;
+import org.openhab.core.thing.binding.ThingHandler;
 import org.openhab.core.types.Command;
 import org.openhab.core.types.RefreshType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.openhab.binding.customplantirrigationstation.internal.config.CustomPlantIrrigationStationConfiguration;
+import org.openhab.binding.customplantirrigationstation.internal.communication.PicoCommunicator;
+
+import java.util.HashMap;
+
+
 /**
- * The {@link CustomPlantIrrigationStationHandler} is responsible for handling commands, which are
+ * The {@link CustomPlantIrrigationBridgeHandler} is responsible for handling commands, which are
  * sent to one of the channels.
  *
  * @author Philip Hirschle - Initial contribution
  */
 @NonNullByDefault
-public class CustomPlantIrrigationStationHandler extends BaseThingHandler {
+public class CustomPlantIrrigationBridgeHandler extends BaseBridgeHandler {
+    private class PlantInformations{
+        float minReference;
+        float maxReference;
+        // TODO: water intervall also
+        PlantInformations() {
 
-    private final Logger logger = LoggerFactory.getLogger(CustomPlantIrrigationStationHandler.class);
+        }
+    }
+
+    private final Logger logger = LoggerFactory.getLogger(CustomPlantIrrigationBridgeHandler.class);
 
     private @Nullable CustomPlantIrrigationStationConfiguration config;
+    private @Nullable HashMap<Integer, PlantInformations> plantData;
 
-    public CustomPlantIrrigationStationHandler(Thing thing) {
-        super(thing);
+
+    public CustomPlantIrrigationBridgeHandler(Bridge bridge) {
+        super(bridge);
     }
+
 
     @Override
     public void handleCommand(ChannelUID channelUID, Command command) {
@@ -58,32 +72,25 @@ public class CustomPlantIrrigationStationHandler extends BaseThingHandler {
         }
     }
 
+
     @Override
     public void initialize() {
-        config = getConfigAs(CustomPlantIrrigationStationConfiguration.class);
-
-        // TODO: Initialize the handler.
-        // The framework requires you to return from this method quickly, i.e. any network access must be done in
-        // the background initialization below.
-        // Also, before leaving this method a thing status from one of ONLINE, OFFLINE or UNKNOWN must be set. This
-        // might already be the real thing status in case you can decide it directly.
-        // In case you can not decide the thing status directly (e.g. for long running connection handshake using WAN
-        // access or similar) you should set status UNKNOWN here and then decide the real status asynchronously in the
-        // background.
+        this.config = getConfigAs(CustomPlantIrrigationStationConfiguration.class);
 
         // set the thing status to UNKNOWN temporarily and let the background task decide for the real status.
         // the framework is then able to reuse the resources from the thing handler initialization.
         // we set this upfront to reliably check status updates in unit tests.
         updateStatus(ThingStatus.UNKNOWN);
 
-        // Example for background initialization:
+        this.plantData = new HashMap<>(5);
+        // for background initialization
         scheduler.execute(() -> {
-            boolean thingReachable = true; // <background task with long running initialization here>
-            // when done do:
+            boolean thingReachable = PicoCommunicator.initialize();
+
             if (thingReachable) {
                 updateStatus(ThingStatus.ONLINE);
             } else {
-                updateStatus(ThingStatus.OFFLINE);
+                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.HANDLER_INITIALIZING_ERROR, "UART connection failed");
             }
         });
 
@@ -94,11 +101,41 @@ public class CustomPlantIrrigationStationHandler extends BaseThingHandler {
         //
         // Logging to INFO should be avoided normally.
         // See https://www.openhab.org/docs/developer/guidelines.html#f-logging
+    }
 
-        // Note: When initialization can NOT be done set the status with more details for further
-        // analysis. See also class ThingStatusDetail for all available status details.
-        // Add a description to give user information to understand why thing does not work as expected. E.g.
-        // updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-        // "Can not access device as username and/or password are invalid");
+
+    /**
+     *
+     * @param thingHandler
+     * @param thing
+     */
+    @Override
+    public void childHandlerInitialized(ThingHandler thingHandler, Thing thing) {
+        int location = (int) thing.getConfiguration().get("location");
+        this.plantData.put(location, new PlantInformations());
+        super.childHandlerInitialized(thingHandler, thing);
+    }
+
+
+    /**
+     *
+     * @param thingHandler
+     * @param thing
+     */
+    @Override
+    public void childHandlerDisposed(ThingHandler thingHandler, Thing thing) {
+        int location = (int) thing.getConfiguration().get("location");
+        this.plantData.remove(location);
+        super.childHandlerDisposed(thingHandler, thing);
+    }
+
+
+    /**
+     * For handler disposal.
+     */
+    @Override
+    public void dispose() {
+        scheduler.execute(PicoCommunicator::cleanup);
+        super.dispose();
     }
 }

@@ -16,14 +16,15 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 
 /**
- * The {@link PlantConfiguration} class contains fields mapping thing configuration parameters.
+ * The {@link CustomPlantIrrigationPlantConfiguration} class contains fields mapping thing configuration parameters.
  *
  * @author Philip Hirschle - Initial contribution
  */
 @NonNullByDefault
-public class PlantConfiguration {
+public class CustomPlantIrrigationPlantConfiguration {
 
     public @Nullable String name;
     public int location;
-    public int waterQuantity = 5;       // pumping time in seconds
+    public int waterQuantity = 5;           // pumping time in seconds; minimum is 1 second
+    public int measurementInterval = 60;    // soil moisture measurement interval in seconds; minimum is one second
 }

@@ -1,6 +1,20 @@
-package org.openhab.binding.customplantirrigationstation.internal;
+/**
+ * Copyright (c) 2010-2022 Contributors to the openHAB project
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Eclipse Public License 2.0 which is available at
+ * http://www.eclipse.org/legal/epl-2.0
+ *
+ * SPDX-License-Identifier: EPL-2.0
+ */
+package org.openhab.binding.customplantirrigationstation.internal.communication;
 
 import java.nio.ByteBuffer;
+import java.util.EnumMap;
+import java.util.Map;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
@@ -17,11 +31,13 @@ import com.pi4j.provider.exception.ProviderNotFoundException;
 
 import org.openhab.binding.customplantirrigationstation.internal.exceptions.UARTConnectionBuildupFailure;
 
+import static org.openhab.binding.customplantirrigationstation.internal.communication.CommunicationMessages.*;
+
 
 /**
- * This is a singleton class which provides the methods for UART communication with the raspberry pico. The singleton
- * access and creation is thread safe. As there will always be only one raspberry pico included in the system it is
- * suitable that this class is a singleton.
+ * The {@link UARTConnection} is a singleton class which provides the methods for UART communication with the raspberry
+ * pico. The singleton access and creation is thread safe. As there will always be only one raspberry pico included in
+ * the system it is suitable that this class is a singleton.
  *
  * @author Philip Hirschle - Initial Contribution
  */
@@ -71,6 +87,8 @@ final class UARTConnection {
                 .stopBits(StopBits._1)
                 .device("/dev/ttyS0")
                 .build();
+        assert this.pi4j != null;
+        assert this.configuration != null;
         try {
             this.ioProvider = pi4j.provider("pigpio-serial");
         } catch (ProviderNotFoundException e) {
@@ -117,55 +135,75 @@ final class UARTConnection {
     /**
      * This method has to be called before the program closes to shut down and clean up the serial connection.
      */
-    void closeConnection() {
+    private void closeConnection() {
         try {
             this.pi4j.shutdown();
+        } catch (NullPointerException e) {
+            // TODO: some logging: this should not happen but could very well be okay since there is nothing to clean up
         } catch (ShutdownException e) {
             // TODO: some logging of fatal error
         }
+    }
+
+
+    /**
+     * This method has to be called before the program closes to shut down and clean up the serial connection.
+     */
+    static void cleanUp() {
+        assert UARTConnection.instance != null;
+        UARTConnection.instance.closeConnection();
+        UARTConnection.instance = null;
     }
 }
 
 
 /**
- * This class provides Methods for sending and retrieving messages to the raspberry pico.
+ * The {@link PicoCommunicator} provides Methods for sending and retrieving messages to the raspberry pico.
  *
  * @author Philip Hirschle - Initial Contribution
  */
 @NonNullByDefault
 public final class PicoCommunicator {
 
+    private final static EnumMap<CommunicationMessages, Character> messageMap = new EnumMap<>(Map.of(
+            GET_REFERENCE_VALUE_DRY,    'c',
+            GET_REFERENCE_VALUE_WET,    'c',
+            GET_HUMIDITY,               'c',
+            GET_WATER_AMOUNT,           'c',
+            IRRIGATE,                   'c',
+            INITIALIZE,                 'c',
+            DISPOSE,                    'c'
+    ));
+
 
     /**
      * This function will return the message in a suitable format for sending to the raspberry pico via UART. The
      * message is generated based on the given parameter.
-     * @param nachrichtenTyp: A integer which encodes the kind of message which should be generated.
+     * @param message: A member of the {@link CommunicationMessages} enum which represents the kind of message which
+     *               should be generated.
      * @return The message which can be sent to the raspberry pico.
      */
-    private static char getCommunicationMessage(int nachrichtenTyp) {
-        char res;
-        switch (nachrichtenTyp) {
-            case 0:
-                res = 'B';
-                break;
-            case 1:
-                res = 'C';
-                break;
-            default:            // test case
-                res = 'T';
-                break;
+    static ByteBuffer sendReceive (CommunicationMessages message) throws UARTConnectionBuildupFailure {
+        return UARTConnection.getInstance().communicate(messageMap.get(message));
+    }
+
+
+    public static boolean initialize() {
+        try {
+            UARTConnection.getInstance();
+        } catch (UARTConnectionBuildupFailure e) {
+            // TODO: Some logging
+            return false;
         }
-        return res;
+        return true;
     }
 
 
-    static ByteBuffer sendReceive (int nachrichtTyp) throws UARTConnectionBuildupFailure {
-        return UARTConnection.getInstance().communicate((getCommunicationMessage(nachrichtTyp)));
-    }
-
-
-    static void cleanup() throws UARTConnectionBuildupFailure {
-        UARTConnection.getInstance().closeConnection();
+    /**
+     * This method has to be called on program end or binding disposal.
+     */
+    public static void cleanup() {
+        UARTConnection.cleanUp();
     }
 }
 

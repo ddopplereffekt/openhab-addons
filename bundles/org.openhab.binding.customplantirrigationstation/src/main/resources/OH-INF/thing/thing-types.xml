@@ -37,23 +37,30 @@
 		<config-description>
 			<parameter name="location" type="integer" required="true">
 				<context>plant-location</context>
-				<label>Location</label>
+				<label>Location of Plant</label>
 				<description>Integer which categorizes the location of the plant (see README.md file).</description>
 			</parameter>
 
 			<parameter name="name" type="text" required="true">
 				<context>name</context>
-				<label>Name</label>
+				<label>Name of Plant</label>
 				<description>The name of the plant.</description>
 			</parameter>
 
 			<parameter name="waterQuantity" type="integer" unit="s" min="1">
-				<context>water-Quantity</context>
-				<label>Quantity of water</label>
+				<context>water-quantity</context>
+				<label>Quantity of Water</label>
 				<description>
 					The amount of water a plant will receive for one irrigation. Measured via the pumping time in seconds.
 				</description>
 				<default>5</default>
+			</parameter>
+
+			<parameter name="measurementInterval" type="integer" unit="s" min="1" required="false">
+				<context>measurement-interval</context>
+				<label>Measurement Interval</label>
+				<description>The interval between the soil moisture meassurements in seconds.</description>
+				<default>60</default>
 			</parameter>
 		</config-description>
 	</thing-type>
