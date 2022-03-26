@@ -20,6 +20,8 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 
 import org.openhab.core.library.types.DateTimeType;
+import org.openhab.core.library.types.DecimalType;
+import org.openhab.core.library.types.OnOffType;
 import org.openhab.core.library.types.StringType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -48,8 +50,8 @@ public class CustomPlantIrrigationPlantHandler extends BaseThingHandler {
 
     private @Nullable ScheduledFuture<?> moistureMeasurementJob;
 
-    private @Nullable Float referenceDry;
-    private @Nullable Float referenceWet;
+    private @Nullable Double referenceDry;
+    private @Nullable Double referenceWet;
 
 
     public CustomPlantIrrigationPlantHandler(Thing thing) {
@@ -73,7 +75,8 @@ public class CustomPlantIrrigationPlantHandler extends BaseThingHandler {
                             assert bridge != null;
                             assert this.config != null;
                             bridge.waterPlant(this.config.location, this.config.waterQuantity);
-                            updateState(CHANNEL_IRRIGATION, new DateTimeType(ZonedDateTime.now()));
+                            updateState(CHANNEL_IRRIGATION, OnOffType.OFF);
+                            // updateState(CHANNEL_IRRIGATION, new DateTimeType(ZonedDateTime.now()));
                         }
                     }
                     break;
@@ -126,10 +129,16 @@ public class CustomPlantIrrigationPlantHandler extends BaseThingHandler {
         double res = bridge.measureMoisture(this.config.location);
         switch (c) {
             case 'd':
-                break;
+                this.referenceDry = res;
             case 'w':
-                break;
+                this.referenceWet = res;
             default:        // regular humidity measurement
+                updateState(CHANNEL_EARTH_MOISTURE, new DecimalType(res));
+                if (this.referenceDry != null & this.referenceWet != null) {
+                    if (res <= this.referenceDry) {         // TODO Toleranz einabuen
+                        updateState(CHANNEL_IRRIGATION, OnOffType.ON);
+                    }
+                }
         }
         // TODO
         // TODO no exception!

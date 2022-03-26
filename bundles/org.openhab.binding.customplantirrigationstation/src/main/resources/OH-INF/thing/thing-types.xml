@@ -125,9 +125,9 @@
 
 
 	<channel-type id="irrigation-channel">
-		<item-type>DateTime</item-type>
+		<item-type>Switch</item-type>
 		<label>Irrigation Command</label><!-- Use uppercase words, except prepositions. 2-3 words, max 25 chars -->
-		<description>This channel is to give a command for the irrigation of the corresponding plant. It will display wether the plant reached to display the date of the last irrigation.</description>
+		<description>This channel is to give a command for the irrigation of the corresponding plant. It is modeled as a switch which is on when the moisture level of the soil is at the reference value for dry soil.</description>
 		<category>Switch</category>
 		<tags>
 			<tag>Control</tag>
