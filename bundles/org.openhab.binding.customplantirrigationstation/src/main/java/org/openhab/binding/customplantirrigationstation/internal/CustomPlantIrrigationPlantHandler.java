@@ -12,16 +12,25 @@
  */
 package org.openhab.binding.customplantirrigationstation.internal;
 
+import java.time.ZonedDateTime;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
+
+import org.openhab.core.library.types.DateTimeType;
+import org.openhab.core.library.types.StringType;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import org.openhab.core.thing.*;
 import org.openhab.core.thing.binding.BaseThingHandler;
 import org.openhab.core.types.Command;
 import org.openhab.core.types.RefreshType;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import org.openhab.binding.customplantirrigationstation.internal.config.CustomPlantIrrigationPlantConfiguration;
+import static org.openhab.binding.customplantirrigationstation.internal.CustomPlantIrrigationStationBindingConstants.*;
 
 
 /**
@@ -37,25 +46,95 @@ public class CustomPlantIrrigationPlantHandler extends BaseThingHandler {
 
     private @Nullable CustomPlantIrrigationPlantConfiguration config;
 
+    private @Nullable ScheduledFuture<?> moistureMeasurementJob;
+
+    private @Nullable Float referenceDry;
+    private @Nullable Float referenceWet;
+
+
     public CustomPlantIrrigationPlantHandler(Thing thing) {
         super(thing);
     }
 
+
     @Override
     public void handleCommand(ChannelUID channelUID, Command command) {
-        if (CHANNEL_1.equals(channelUID.getId())) {
-            if (command instanceof RefreshType) {
-                // TODO: handle data refresh
+        try {
+            switch (channelUID.getId()) {
+                case CHANNEL_IRRIGATION:
+                    if (command instanceof RefreshType) {
+                        break;          // only irrigate when the command is coming
+                    }
+
+                    if (command instanceof StringType) {
+                        String c = command.toFullString();
+                        if (c.equals("irrigate")) {
+                            CustomPlantIrrigationBridgeHandler bridge = (CustomPlantIrrigationBridgeHandler) this.getBridge().getHandler();
+                            assert bridge != null;
+                            assert this.config != null;
+                            bridge.waterPlant(this.config.location, this.config.waterQuantity);
+                            updateState(CHANNEL_IRRIGATION, new DateTimeType(ZonedDateTime.now()));
+                        }
+                    }
+                    break;
+                case CHANNEL_EARTH_MOISTURE:
+                    if (command instanceof RefreshType) {
+                        this.measureMoisture('0');
+                    }
+
+                    if (command instanceof StringType) {
+                        String c = command.toFullString();
+                        if (c.equals("meassure_soil_moisture")) {
+                            this.measureMoisture('0');
+                        }
+                    }
+                    break;
+                default:                        // CHANNEL_REFERENCE_EARTH_MOISTURE
+                    if (command instanceof RefreshType) {
+                        if (this.referenceDry == null | this.referenceWet == null) {
+                            updateState(CHANNEL_REFERENCE_EARTH_MOISTURE, new StringType("not-referenced"));
+                        } else {
+                            updateState(CHANNEL_REFERENCE_EARTH_MOISTURE, new StringType("referenced"));
+                        }
+                    }
+
+                    if (command instanceof StringType) {
+                        String c = command.toFullString();
+                        if (c.equals("meassure_reference_4_dry_soil")) {
+                            this.measureMoisture('d');
+                        } else if (c.equals("meassure_reference_4_wet_soil")) {
+                            this.measureMoisture('w');
+                        }
+                        if (this.referenceDry != null & this.referenceWet != null) {
+                            updateState(CHANNEL_REFERENCE_EARTH_MOISTURE, new StringType("referenced"));
+                        }
+                    }
             }
-
-            // TODO: handle command
-
-            // Note: if communication with thing fails for some reason,
-            // indicate that by setting the status with detail information:
-            // updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-            // "Could not control device at IP address x.x.x.x");
+        } catch (Exception e) {         // TODO: Exception type
+            this.updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, "");
         }
     }
+
+
+    /**
+     *
+     */
+    private void measureMoisture(char c) {
+        CustomPlantIrrigationBridgeHandler bridge = (CustomPlantIrrigationBridgeHandler) this.getBridge().getHandler();
+        assert bridge != null;
+        assert this.config != null;
+        double res = bridge.measureMoisture(this.config.location);
+        switch (c) {
+            case 'd':
+                break;
+            case 'w':
+                break;
+            default:        // regular humidity measurement
+        }
+        // TODO
+        // TODO no exception!
+    }
+
 
     @Override
     public void initialize() {
@@ -66,14 +145,19 @@ public class CustomPlantIrrigationPlantHandler extends BaseThingHandler {
         // we set this upfront to reliably check status updates in unit tests.
         updateStatus(ThingStatus.UNKNOWN);
 
-        boolean locationTaken = getBridge().getThings().stream()
-                .anyMatch(thing -> thing.getConfiguration().get("location").equals(config.location));
-        if (locationTaken) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.HANDLER_INITIALIZING_ERROR,
-                    "The location was taken. The bridge will try to automaticly localize the plant or use a default value.");
-            // TODO: location automatic finding or to default changing
+        if (this.config != null) {
+            boolean locationTaken = getBridge().getThings().stream()
+                    .anyMatch(thing -> thing.getConfiguration().get("location").equals(this.config.location));
+            if (locationTaken) {
+                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.OFFLINE.CONFIGURATION_ERROR,
+                        "The location is already taken. Every location can only be used for one plant.");
+            }
+
+            this.moistureMeasurementJob = scheduler.scheduleWithFixedDelay(() -> this.measureMoisture('0'), 0, this.config.measurementInterval, TimeUnit.SECONDS);
+            updateStatus(ThingStatus.ONLINE);
         }
-        updateStatus(ThingStatus.ONLINE);
+        updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.HANDLER_INITIALIZING_ERROR,
+                "Could not get the configuration, which is neccesary for the initialization.");
 
         // These logging types should be primarily used by bindings
         // logger.trace("Example trace message");
@@ -86,7 +170,8 @@ public class CustomPlantIrrigationPlantHandler extends BaseThingHandler {
 
 
     /**
-     * This method must be implemented because the {@link CustomPlantIrrigationPlantHandler} needs a bridge (the {@link CustomPlantIrrigationBridgeHandler}).
+     * This method must be implemented because the {@link CustomPlantIrrigationPlantHandler} needs a bridge
+     * ({@link CustomPlantIrrigationBridgeHandler}).
      * @param statusInfo The {@link ThingStatusInfo} regarding the change of the {@link ThingStatus} of the bridge.
      */
     @Override
@@ -96,5 +181,15 @@ public class CustomPlantIrrigationPlantHandler extends BaseThingHandler {
         } else if (statusInfo.getStatus().equals(ThingStatus.ONLINE)) {
             updateStatus(ThingStatus.ONLINE);           // TODO: no check required that the connection to the pico is good?
         }
+    }
+
+
+    @Override
+    public void dispose() {
+        if (moistureMeasurementJob != null) {
+            moistureMeasurementJob.cancel(true);
+            moistureMeasurementJob = null;
+        }
+        super.dispose();
     }
 }

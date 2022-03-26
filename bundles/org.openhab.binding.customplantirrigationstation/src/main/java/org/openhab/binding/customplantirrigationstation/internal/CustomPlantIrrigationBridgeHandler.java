@@ -12,20 +12,22 @@
  */
 package org.openhab.binding.customplantirrigationstation.internal;
 
+import java.util.HashMap;
+
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
+import org.openhab.core.library.types.DecimalType;
 import org.openhab.core.thing.*;
 import org.openhab.core.thing.binding.BaseBridgeHandler;
 import org.openhab.core.thing.binding.ThingHandler;
 import org.openhab.core.types.Command;
-import org.openhab.core.types.RefreshType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.openhab.binding.customplantirrigationstation.internal.config.CustomPlantIrrigationStationConfiguration;
 import org.openhab.binding.customplantirrigationstation.internal.communication.PicoCommunicator;
-
-import java.util.HashMap;
+import static org.openhab.binding.customplantirrigationstation.internal.CustomPlantIrrigationStationBindingConstants.*;
+import static org.openhab.binding.customplantirrigationstation.internal.communication.CommunicationMessages.*;
 
 
 /**
@@ -48,7 +50,7 @@ public class CustomPlantIrrigationBridgeHandler extends BaseBridgeHandler {
     private final Logger logger = LoggerFactory.getLogger(CustomPlantIrrigationBridgeHandler.class);
 
     private @Nullable CustomPlantIrrigationStationConfiguration config;
-    private @Nullable HashMap<Integer, PlantInformations> plantData;
+    private @Nullable HashMap<Integer, PlantInformations> location2PlantData;
 
 
     public CustomPlantIrrigationBridgeHandler(Bridge bridge) {
@@ -58,18 +60,33 @@ public class CustomPlantIrrigationBridgeHandler extends BaseBridgeHandler {
 
     @Override
     public void handleCommand(ChannelUID channelUID, Command command) {
-        if (CHANNEL_1.equals(channelUID.getId())) {
-            if (command instanceof RefreshType) {
-                // TODO: handle data refresh
-            }
-
-            // TODO: handle command
-
-            // Note: if communication with thing fails for some reason,
-            // indicate that by setting the status with detail information:
-            // updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-            // "Could not control device at IP address x.x.x.x");
+        if (channelUID.getId().equals(CHANNEL_WATER_LEVEL)) {
+            // TODO wie kommt Ergebnis zurück?
+            scheduler.execute(() -> PicoCommunicator.sendReceive(GET_WATER_LEVEL));
+            updateState(CHANNEL_WATER_LEVEL, new DecimalType(1.0));
         }
+    }
+
+
+    /**
+     *
+     * @param location
+     */
+    double measureMoisture(int location) {
+        // TODO wie kommt das Ergebnis wieder zur Pflanze zurück?
+        scheduler.execute(() -> PicoCommunicator.sendReceive(GET_HUMIDITY));
+        return 1.0;
+    }
+
+
+    /**
+     *
+     * @param location
+     */
+    void waterPlant(int location, int wateringTime) {
+        // TODO irgendwie die Informationen für die Bewässerung mitgeben
+        scheduler.execute(() -> updateState(CHANNEL_WATER_LEVEL, new DecimalType(PicoCommunicator.sendReceive(IRRIGATE))));
+        updateState(CHANNEL_WATER_LEVEL, new DecimalType(1.0));
     }
 
 
@@ -82,7 +99,7 @@ public class CustomPlantIrrigationBridgeHandler extends BaseBridgeHandler {
         // we set this upfront to reliably check status updates in unit tests.
         updateStatus(ThingStatus.UNKNOWN);
 
-        this.plantData = new HashMap<>(5);
+        this.location2PlantData = new HashMap<>(5);
         // for background initialization
         scheduler.execute(() -> {
             boolean thingReachable = PicoCommunicator.initialize();
@@ -112,7 +129,7 @@ public class CustomPlantIrrigationBridgeHandler extends BaseBridgeHandler {
     @Override
     public void childHandlerInitialized(ThingHandler thingHandler, Thing thing) {
         int location = (int) thing.getConfiguration().get("location");
-        this.plantData.put(location, new PlantInformations());
+        this.location2PlantData.put(location, new PlantInformations());
         super.childHandlerInitialized(thingHandler, thing);
     }
 
@@ -125,7 +142,7 @@ public class CustomPlantIrrigationBridgeHandler extends BaseBridgeHandler {
     @Override
     public void childHandlerDisposed(ThingHandler thingHandler, Thing thing) {
         int location = (int) thing.getConfiguration().get("location");
-        this.plantData.remove(location);
+        this.location2PlantData.remove(location);
         super.childHandlerDisposed(thingHandler, thing);
     }
 

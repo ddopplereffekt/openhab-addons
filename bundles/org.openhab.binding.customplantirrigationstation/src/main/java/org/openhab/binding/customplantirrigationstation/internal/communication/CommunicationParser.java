@@ -12,20 +12,19 @@
  */
 package org.openhab.binding.customplantirrigationstation.internal.communication;
 
-import org.eclipse.jdt.annotation.NonNullByDefault;
+import java.nio.ByteBuffer;
 
 
 /**
- * The {@link CommunicationMessages} is a enum which members represent all possible messages which can be sent to the
- * raspberry pico.
+ * The {@link CommunicationParser} class is responsible for parsing the answer of the raspberry pico.
  *
  * @author Philip Hirschle - Initial Contribution
  */
-@NonNullByDefault
-public enum CommunicationMessages {
-    GET_HUMIDITY,
-    GET_WATER_LEVEL,
-    IRRIGATE,
-    INITIALIZE,
-    DISPOSE
+public class CommunicationParser {
+
+
+    static double parseCommunciation(ByteBuffer answer) {
+        // TODO
+        return 1.0;
+    }
 }

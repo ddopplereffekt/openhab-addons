@@ -166,10 +166,7 @@ final class UARTConnection {
 public final class PicoCommunicator {
 
     private final static EnumMap<CommunicationMessages, Character> messageMap = new EnumMap<>(Map.of(
-            GET_REFERENCE_VALUE_DRY,    'c',
-            GET_REFERENCE_VALUE_WET,    'c',
             GET_HUMIDITY,               'c',
-            GET_WATER_AMOUNT,           'c',
             IRRIGATE,                   'c',
             INITIALIZE,                 'c',
             DISPOSE,                    'c'
@@ -183,8 +180,14 @@ public final class PicoCommunicator {
      *               should be generated.
      * @return The message which can be sent to the raspberry pico.
      */
-    static ByteBuffer sendReceive (CommunicationMessages message) throws UARTConnectionBuildupFailure {
-        return UARTConnection.getInstance().communicate(messageMap.get(message));
+    public static double sendReceive (CommunicationMessages message) {
+        // TODO: thread safety guaranty here (probably a lock)
+        try {
+            return CommunicationParser.parseCommunciation(UARTConnection.getInstance().communicate(messageMap.get(message)));
+        } catch (UARTConnectionBuildupFailure e) {
+            // TODO: logging , handling
+        }
+        return 0.0;
     }
 
 
@@ -203,6 +206,7 @@ public final class PicoCommunicator {
      * This method has to be called on program end or binding disposal.
      */
     public static void cleanup() {
+        PicoCommunicator.sendReceive(DISPOSE);
         UARTConnection.cleanUp();
     }
 }

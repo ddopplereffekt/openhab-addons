@@ -31,7 +31,7 @@
 			<channel id="reference-earth-moisture" typeId="reference-earth-moisture-channel"/>
 			<channel id="earth-moisture" typeId="earth-moisture-channel"/>
 			<channel id="irrigation" typeId="irrigation-channel"/>
-			<channel id="plant-location" typeId="plant-location-channel"/>
+			<!--<channel id="plant-location" typeId="plant-location-channel"/>-->
 		</channel>
 
 		<config-description>
@@ -125,9 +125,9 @@
 
 
 	<channel-type id="irrigation-channel">
-		<item-type>Switch</item-type>
+		<item-type>DateTime</item-type>
 		<label>Irrigation Command</label><!-- Use uppercase words, except prepositions. 2-3 words, max 25 chars -->
-		<description>This channel is to give a command for the irrigation of the corresponding plant.</description>
+		<description>This channel is to give a command for the irrigation of the corresponding plant. It will display wether the plant reached to display the date of the last irrigation.</description>
 		<category>Switch</category>
 		<tags>
 			<tag>Control</tag>
@@ -142,10 +142,10 @@
 	</channel-type>
 
 
-
+	<!--
 	<channel-type id="plant-location-channel">
 		<item-type>Number</item-type>
-		<label>Location of Plant</label><!-- Use uppercase words, except prepositions. 2-3 words, max 25 chars -->
+		<label>Location of Plant</label>
 		<description>This channel is to set and display the location of the corresponding plant.</description>
 		<tags>
 			<tag>Control</tag>
@@ -153,7 +153,7 @@
 		<state step="1" readOnly="false">
 		</state>
 	</channel-type>
-
+	-->
 </thing:thing-descriptions>
 
 
