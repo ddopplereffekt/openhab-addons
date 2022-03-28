@@ -12,10 +12,9 @@
  */
 package org.openhab.binding.customplantirrigationstation.internal;
 
-import java.util.HashMap;
-
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
+import org.openhab.binding.customplantirrigationstation.internal.communication.CommunicationParser;
 import org.openhab.core.library.types.DecimalType;
 import org.openhab.core.thing.*;
 import org.openhab.core.thing.binding.BaseBridgeHandler;
@@ -24,33 +23,25 @@ import org.openhab.core.types.Command;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.openhab.binding.customplantirrigationstation.internal.config.CustomPlantIrrigationStationConfiguration;
+import org.openhab.binding.customplantirrigationstation.internal.configuration.CustomPlantIrrigationBridgeConfiguration;
 import org.openhab.binding.customplantirrigationstation.internal.communication.PicoCommunicator;
+
 import static org.openhab.binding.customplantirrigationstation.internal.CustomPlantIrrigationStationBindingConstants.*;
 import static org.openhab.binding.customplantirrigationstation.internal.communication.CommunicationMessages.*;
 
 
 /**
- * The {@link CustomPlantIrrigationBridgeHandler} is responsible for handling commands, which are
- * sent to one of the channels.
+ * The {@link CustomPlantIrrigationBridgeHandler} is responsible for handling commands,
+ * which are sent to one of the channels.
  *
  * @author Philip Hirschle - Initial contribution
  */
 @NonNullByDefault
 public class CustomPlantIrrigationBridgeHandler extends BaseBridgeHandler {
-    private class PlantInformations{
-        float minReference;
-        float maxReference;
-        // TODO: water intervall also
-        PlantInformations() {
-
-        }
-    }
 
     private final Logger logger = LoggerFactory.getLogger(CustomPlantIrrigationBridgeHandler.class);
 
-    private @Nullable CustomPlantIrrigationStationConfiguration config;
-    private @Nullable HashMap<Integer, PlantInformations> location2PlantData;
+    private @Nullable CustomPlantIrrigationBridgeConfiguration config;
 
 
     public CustomPlantIrrigationBridgeHandler(Bridge bridge) {
@@ -60,46 +51,61 @@ public class CustomPlantIrrigationBridgeHandler extends BaseBridgeHandler {
 
     @Override
     public void handleCommand(ChannelUID channelUID, Command command) {
-        if (channelUID.getId().equals(CHANNEL_WATER_LEVEL)) {
-            // TODO wie kommt Ergebnis zurück?
-            scheduler.execute(() -> PicoCommunicator.sendReceive(GET_WATER_LEVEL));
-            updateState(CHANNEL_WATER_LEVEL, new DecimalType(1.0));
+        try {
+            if (channelUID.getId().equals(CHANNEL_WATER_LEVEL)) {
+                logger.debug("handeling\nchannel:" + channelUID.getAsString() + "\ncommand: " + command
+                        + "\nwill therefore check the water level");
+                updateState(CHANNEL_WATER_LEVEL,
+                        new DecimalType(
+                                CommunicationParser.parseReceiveMessage(
+                                        PicoCommunicator.sendReceive(
+                                                CommunicationParser.parseSendMessage(GET_WATER_LEVEL, -1, -1)))));
+
+            }
+        } catch (Exception e) {
+            logger.error("During handling of the channelUID " + channelUID.getAsString()
+                    + " and the command " + command.toFullString(), e);
+            this.updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
         }
     }
 
 
     /**
-     *
-     * @param location
+     * This function will make a humidity measurement of the given plant and return the humidity value.
+     * @param location this is a unique identifier for the plant.
      */
     double measureMoisture(int location) {
-        // TODO wie kommt das Ergebnis wieder zur Pflanze zurück?
-        scheduler.execute(() -> PicoCommunicator.sendReceive(GET_HUMIDITY));
-        return 1.0;
+        logger.debug("send request for the plant at location" + location + " to meassure the soil moisture");
+        return CommunicationParser.parseReceiveMessage(
+                PicoCommunicator.sendReceive(
+                        CommunicationParser.parseSendMessage(GET_HUMIDITY, location, -1)));
     }
 
 
     /**
-     *
-     * @param location
+     * This function will irrigate a given plant.
+     * @param location this is a unique identifier for the plant.
+     * @param wateringTime this is the time in seconds that the given plant should be irrigated.
      */
     void waterPlant(int location, int wateringTime) {
-        // TODO irgendwie die Informationen für die Bewässerung mitgeben
-        scheduler.execute(() -> updateState(CHANNEL_WATER_LEVEL, new DecimalType(PicoCommunicator.sendReceive(IRRIGATE))));
-        updateState(CHANNEL_WATER_LEVEL, new DecimalType(1.0));
+        logger.debug("send request for the plant at location" + location + " to irrigate " + wateringTime + " s");
+        updateState(CHANNEL_WATER_LEVEL,
+                new DecimalType(
+                        CommunicationParser.parseReceiveMessage(
+                                PicoCommunicator.sendReceive(
+                                        CommunicationParser.parseSendMessage(IRRIGATE, location, wateringTime)))));
     }
 
 
     @Override
     public void initialize() {
-        this.config = getConfigAs(CustomPlantIrrigationStationConfiguration.class);
+        this.config = getConfigAs(CustomPlantIrrigationBridgeConfiguration.class);
 
         // set the thing status to UNKNOWN temporarily and let the background task decide for the real status.
         // the framework is then able to reuse the resources from the thing handler initialization.
         // we set this upfront to reliably check status updates in unit tests.
         updateStatus(ThingStatus.UNKNOWN);
 
-        this.location2PlantData = new HashMap<>(5);
         // for background initialization
         scheduler.execute(() -> {
             boolean thingReachable = PicoCommunicator.initialize();
@@ -121,38 +127,21 @@ public class CustomPlantIrrigationBridgeHandler extends BaseBridgeHandler {
     }
 
 
-    /**
-     *
-     * @param thingHandler
-     * @param thing
-     */
     @Override
     public void childHandlerInitialized(ThingHandler thingHandler, Thing thing) {
-        int location = (int) thing.getConfiguration().get("location");
-        this.location2PlantData.put(location, new PlantInformations());
         super.childHandlerInitialized(thingHandler, thing);
     }
 
 
-    /**
-     *
-     * @param thingHandler
-     * @param thing
-     */
     @Override
     public void childHandlerDisposed(ThingHandler thingHandler, Thing thing) {
-        int location = (int) thing.getConfiguration().get("location");
-        this.location2PlantData.remove(location);
         super.childHandlerDisposed(thingHandler, thing);
     }
 
 
-    /**
-     * For handler disposal.
-     */
     @Override
     public void dispose() {
-        scheduler.execute(PicoCommunicator::cleanup);
+        PicoCommunicator.cleanup(CommunicationParser.parseSendMessage(DISPOSE, -1, -1));
         super.dispose();
     }
 }

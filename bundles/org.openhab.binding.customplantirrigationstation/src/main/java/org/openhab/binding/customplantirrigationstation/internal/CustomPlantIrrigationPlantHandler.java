@@ -12,14 +12,13 @@
  */
 package org.openhab.binding.customplantirrigationstation.internal;
 
-import java.time.ZonedDateTime;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 
-import org.openhab.core.library.types.DateTimeType;
 import org.openhab.core.library.types.DecimalType;
 import org.openhab.core.library.types.OnOffType;
 import org.openhab.core.library.types.StringType;
@@ -31,13 +30,13 @@ import org.openhab.core.thing.binding.BaseThingHandler;
 import org.openhab.core.types.Command;
 import org.openhab.core.types.RefreshType;
 
-import org.openhab.binding.customplantirrigationstation.internal.config.CustomPlantIrrigationPlantConfiguration;
+import org.openhab.binding.customplantirrigationstation.internal.configuration.CustomPlantIrrigationPlantConfiguration;
 import static org.openhab.binding.customplantirrigationstation.internal.CustomPlantIrrigationStationBindingConstants.*;
 
 
 /**
- * The {@link CustomPlantIrrigationPlantHandler} is responsible for handling commands, which are
- * sent to one of the channels.
+ * The {@link CustomPlantIrrigationPlantHandler} is responsible for handling commands,
+ * which are sent to one of the channels.
  *
  * @author Philip Hirschle - Initial contribution
  */
@@ -52,6 +51,7 @@ public class CustomPlantIrrigationPlantHandler extends BaseThingHandler {
 
     private @Nullable Double referenceDry;
     private @Nullable Double referenceWet;
+    private @Nullable Double currentMoistureValue;
 
 
     public CustomPlantIrrigationPlantHandler(Thing thing) {
@@ -63,9 +63,28 @@ public class CustomPlantIrrigationPlantHandler extends BaseThingHandler {
     public void handleCommand(ChannelUID channelUID, Command command) {
         try {
             switch (channelUID.getId()) {
+                case CHANNEL_EARTH_MOISTURE:
+                    if (command instanceof RefreshType) {
+                        this.measureMoisture('0');
+                        break;
+                    }
+
+                    if (command instanceof StringType) {
+                        String c = command.toFullString();
+                        if (c.equals("meassure_soil_moisture")) {
+                            this.measureMoisture('0');
+                        }
+                    }
+                    break;
+
                 case CHANNEL_IRRIGATION:
                     if (command instanceof RefreshType) {
-                        break;          // only irrigate when the command is coming
+                        if (this.currentMoistureValue == null) {
+                            updateState(CHANNEL_IRRIGATION, OnOffType.OFF);
+                        }else if (this.currentMoistureValue <= 0) {
+                            updateState(CHANNEL_IRRIGATION, OnOffType.ON);
+                        }
+                        break;
                     }
 
                     if (command instanceof StringType) {
@@ -80,32 +99,22 @@ public class CustomPlantIrrigationPlantHandler extends BaseThingHandler {
                         }
                     }
                     break;
-                case CHANNEL_EARTH_MOISTURE:
-                    if (command instanceof RefreshType) {
-                        this.measureMoisture('0');
-                    }
 
-                    if (command instanceof StringType) {
-                        String c = command.toFullString();
-                        if (c.equals("meassure_soil_moisture")) {
-                            this.measureMoisture('0');
-                        }
-                    }
-                    break;
-                default:                        // CHANNEL_REFERENCE_EARTH_MOISTURE
+                default:    // CHANNEL_REFERENCE_EARTH_MOISTURE
                     if (command instanceof RefreshType) {
                         if (this.referenceDry == null | this.referenceWet == null) {
                             updateState(CHANNEL_REFERENCE_EARTH_MOISTURE, new StringType("not-referenced"));
                         } else {
                             updateState(CHANNEL_REFERENCE_EARTH_MOISTURE, new StringType("referenced"));
                         }
+                        break;
                     }
 
                     if (command instanceof StringType) {
                         String c = command.toFullString();
-                        if (c.equals("meassure_reference_4_dry_soil")) {
+                        if (c.equals("measure_reference_4_dry_soil")) {
                             this.measureMoisture('d');
-                        } else if (c.equals("meassure_reference_4_wet_soil")) {
+                        } else if (c.equals("measure_reference_4_wet_soil")) {
                             this.measureMoisture('w');
                         }
                         if (this.referenceDry != null & this.referenceWet != null) {
@@ -113,8 +122,10 @@ public class CustomPlantIrrigationPlantHandler extends BaseThingHandler {
                         }
                     }
             }
-        } catch (Exception e) {         // TODO: Exception type
-            this.updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, "");
+        } catch (Exception e) {
+            logger.error("During handling of the channelUID " + channelUID.getAsString()
+                    + " and the command " + command.toFullString(), e);
+            this.updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
         }
     }
 
@@ -123,58 +134,82 @@ public class CustomPlantIrrigationPlantHandler extends BaseThingHandler {
      *
      */
     private void measureMoisture(char c) {
+        assert this.config != null;
+        logger.debug("plant at location " + this.config.location + " requests measurement of soil moisture.");
+
         CustomPlantIrrigationBridgeHandler bridge = (CustomPlantIrrigationBridgeHandler) this.getBridge().getHandler();
         assert bridge != null;
-        assert this.config != null;
         double res = bridge.measureMoisture(this.config.location);
+
         switch (c) {
             case 'd':
                 this.referenceDry = res;
+                logger.debug("Plant at location " + this.config.location +
+                        " has a moisture reference value for dry soil of " + this.currentMoistureValue);
             case 'w':
                 this.referenceWet = res;
+                logger.debug("Plant at location " + this.config.location +
+                        " has a moisture reference value for irrigated soil of " + this.currentMoistureValue);
             default:        // regular humidity measurement
-                updateState(CHANNEL_EARTH_MOISTURE, new DecimalType(res));
+                this.currentMoistureValue = calculateReferencedHumidityValue(res);
+                logger.debug("Plant at location " + this.config.location + " has a moisture value of " + this.currentMoistureValue);
+                updateState(CHANNEL_EARTH_MOISTURE, new DecimalType(this.currentMoistureValue));
                 if (this.referenceDry != null & this.referenceWet != null) {
-                    if (res <= this.referenceDry) {         // TODO Toleranz einabuen
+                    if (this.currentMoistureValue <= 0) {
                         updateState(CHANNEL_IRRIGATION, OnOffType.ON);
                     }
                 }
         }
-        // TODO
-        // TODO no exception!
+    }
+
+
+    /**
+     * Parses the measured value to a more intuitive value.
+     * @param measurement the measured value.
+     * @return a double between 0 and 1 as long as the measured value is between the reference values, a value < 0 if
+     * the measured value is smaller than the reference for dry soil and a value > 1 if the measured value is > than
+     * the reference for irrigated soil. If this plant has not both reference measurements the returned value is always
+     * 0.9.
+     */
+    private double calculateReferencedHumidityValue(double measurement) {
+        if (this.referenceDry != null & this.referenceWet != null) {
+            return (measurement - this.referenceDry) / (this.referenceWet - this.referenceDry);
+        }
+        return 0.9;
     }
 
 
     @Override
     public void initialize() {
-        this.config = getConfigAs(CustomPlantIrrigationPlantConfiguration.class);
-
         // set the thing status to UNKNOWN temporarily and let the background task decide for the real status.
         // the framework is then able to reuse the resources from the thing handler initialization.
         // we set this upfront to reliably check status updates in unit tests.
         updateStatus(ThingStatus.UNKNOWN);
 
-        if (this.config != null) {
-            boolean locationTaken = getBridge().getThings().stream()
-                    .anyMatch(thing -> thing.getConfiguration().get("location").equals(this.config.location));
-            if (locationTaken) {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.OFFLINE.CONFIGURATION_ERROR,
-                        "The location is already taken. Every location can only be used for one plant.");
-            }
-
-            this.moistureMeasurementJob = scheduler.scheduleWithFixedDelay(() -> this.measureMoisture('0'), 0, this.config.measurementInterval, TimeUnit.SECONDS);
-            updateStatus(ThingStatus.ONLINE);
-        }
-        updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.HANDLER_INITIALIZING_ERROR,
+        this.config = getConfigAs(CustomPlantIrrigationPlantConfiguration.class);
+        if (this.config == null) {
+            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.HANDLER_INITIALIZING_ERROR,
                 "Could not get the configuration, which is neccesary for the initialization.");
+            return;
+        }
 
-        // These logging types should be primarily used by bindings
-        // logger.trace("Example trace message");
-        // logger.debug("Example debug message");
-        // logger.warn("Example warn message");
-        //
-        // Logging to INFO should be avoided normally.
-        // See https://www.openhab.org/docs/developer/guidelines.html#f-logging
+        boolean locationTaken = getBridge().getThings().stream()
+                .anyMatch(thing -> thing.getConfiguration().get("location").equals(this.config.location));
+        if (locationTaken) {
+            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.OFFLINE.CONFIGURATION_ERROR,
+                    "The location is already taken. Every location can only be used for one plant.");
+            return;
+        }
+
+        try {
+            this.moistureMeasurementJob = scheduler.scheduleWithFixedDelay(
+                    () -> this.measureMoisture('0'), 0, this.config.measurementInterval, TimeUnit.SECONDS);
+        } catch (RejectedExecutionException e) {
+            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.HANDLER_INITIALIZING_ERROR,
+                    "The handler could not submit a job via the scheduler (ScheduledExecuterService).\n\n"
+                            + e.getMessage());
+        }
+        updateStatus(ThingStatus.ONLINE);
     }
 
 
@@ -188,7 +223,7 @@ public class CustomPlantIrrigationPlantHandler extends BaseThingHandler {
         if (statusInfo.getStatus().equals(ThingStatus.OFFLINE)) {
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE);
         } else if (statusInfo.getStatus().equals(ThingStatus.ONLINE)) {
-            updateStatus(ThingStatus.ONLINE);           // TODO: no check required that the connection to the pico is good?
+            updateStatus(ThingStatus.ONLINE);
         }
     }
 

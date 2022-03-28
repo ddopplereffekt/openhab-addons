@@ -10,16 +10,16 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-package org.openhab.binding.customplantirrigationstation.internal.config;
+package org.openhab.binding.customplantirrigationstation.internal.configuration;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 
 /**
- * The {@link CustomPlantIrrigationStationConfiguration} class contains fields mapping thing configuration parameters.
+ * The {@link CustomPlantIrrigationBridgeConfiguration} class contains fields mapping thing configuration parameters.
  *
  * @author Philip Hirschle - Initial contribution
  */
 @NonNullByDefault
-public class CustomPlantIrrigationStationConfiguration {
+public class CustomPlantIrrigationBridgeConfiguration {
 
 }

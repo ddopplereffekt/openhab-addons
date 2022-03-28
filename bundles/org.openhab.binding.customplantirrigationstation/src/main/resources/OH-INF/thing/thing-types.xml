@@ -96,8 +96,8 @@
 		</state>
 		<command>
 			<options>
-				<option value="meassure_reference_4_dry_soil">Meassure the reference value for dry soil.</option>
-				<option value="meassure_reference_4_wet_soil">Meassure the reference value for irrigated soil.</option>
+				<option value="measure_reference_4_dry_soil">Meassure the reference value for dry soil.</option>
+				<option value="measure_reference_4_wet_soil">Meassure the reference value for irrigated soil.</option>
 			</options>
 		</command>
 	</channel-type>

@@ -12,9 +12,9 @@
  */
 package org.openhab.binding.customplantirrigationstation.internal.communication;
 
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
-import java.util.EnumMap;
-import java.util.Map;
+import java.util.concurrent.locks.ReentrantLock;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
@@ -29,9 +29,10 @@ import com.pi4j.io.serial.StopBits;
 import com.pi4j.io.serial.SerialProvider;
 import com.pi4j.provider.exception.ProviderNotFoundException;
 
+import org.openhab.binding.customplantirrigationstation.internal.CustomPlantIrrigationBridgeHandler;
 import org.openhab.binding.customplantirrigationstation.internal.exceptions.UARTConnectionBuildupFailure;
-
-import static org.openhab.binding.customplantirrigationstation.internal.communication.CommunicationMessages.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -43,8 +44,12 @@ import static org.openhab.binding.customplantirrigationstation.internal.communic
  */
 @NonNullByDefault
 final class UARTConnection {
+
+    private static final Logger logger = LoggerFactory.getLogger(UARTConnection.class);
+
+
     // the singleton instance
-    private @Nullable volatile static UARTConnection instance;
+    private static volatile @Nullable UARTConnection instance;
 
 
     /**
@@ -76,6 +81,11 @@ final class UARTConnection {
     private UARTConnection() throws UARTConnectionBuildupFailure {
         // Initialize Pi4J with an auto context
         this.pi4j = Pi4J.newAutoContext();
+        if (this.pi4j == null) {
+            logger.error("Pi4J object for UART connection could not be created");
+            throw new UARTConnectionBuildupFailure("Pi4J object for UART connection could not be created");
+        }
+
         this.configuration =  Serial.newConfigBuilder(pi4j)
                 .provider("pigpio-serial")
                 .id("uart-port-to-pico")
@@ -87,12 +97,15 @@ final class UARTConnection {
                 .stopBits(StopBits._1)
                 .device("/dev/ttyS0")
                 .build();
-        assert this.pi4j != null;
-        assert this.configuration != null;
+        if (this.configuration == null) {
+            logger.error("Configuration object for UART connection could not be created");
+            throw new UARTConnectionBuildupFailure("Configuration object for UART connection could not be created");
+        }
+
         try {
             this.ioProvider = pi4j.provider("pigpio-serial");
         } catch (ProviderNotFoundException e) {
-            // TODO: some logging and other stuff to get the error away
+            logger.error("pigpio-serial provider is neccesary for this class to function", e);
             throw new UARTConnectionBuildupFailure(e.getMessage());
         }
     }
@@ -103,8 +116,9 @@ final class UARTConnection {
      * @param data This is the message to be sent.
      * @return The message which was received.
      */
-    ByteBuffer communicate(char data) {
+    ByteBuffer communicate(ByteBuffer data) {
         ByteBuffer result;
+        assert this.ioProvider != null;
         try (Serial serialConnection = this.ioProvider.create(configuration)) {
             //sending the message
             serialConnection.write(data);
@@ -115,7 +129,7 @@ final class UARTConnection {
                     //noinspection BusyWait
                     Thread.sleep(50);
                 } catch (InterruptedException e) {
-                    // TODO: some sort of logging
+                    logger.debug("This thread got interrupted while waiting for the answer of the raspberry pico via the serial connection.");
                     Thread.yield();
                 }
             }
@@ -136,12 +150,11 @@ final class UARTConnection {
      * This method has to be called before the program closes to shut down and clean up the serial connection.
      */
     private void closeConnection() {
+        assert this.pi4j != null;
         try {
             this.pi4j.shutdown();
-        } catch (NullPointerException e) {
-            // TODO: some logging: this should not happen but could very well be okay since there is nothing to clean up
         } catch (ShutdownException e) {
-            // TODO: some logging of fatal error
+            logger.error("encountered while trying to close the Connection to the raspberry pico", e);
         }
     }
 
@@ -150,54 +163,62 @@ final class UARTConnection {
      * This method has to be called before the program closes to shut down and clean up the serial connection.
      */
     static void cleanUp() {
-        assert UARTConnection.instance != null;
-        UARTConnection.instance.closeConnection();
-        UARTConnection.instance = null;
+        try {
+            UARTConnection.instance.closeConnection();
+            UARTConnection.instance = null;
+        } catch (NullPointerException e) {
+            logger.error("Nullpointer Exception while trying to clean up the connection to the raspberry pico.\n" +
+                    "This indicates that the call to PicoCommunicator.initialize was not successful.\n" +
+                    "This error can be ignored if the communication to the raspberrry pico is not needed anymore.");
+        }
     }
 }
 
 
 /**
- * The {@link PicoCommunicator} provides Methods for sending and retrieving messages to the raspberry pico.
+ * The {@link PicoCommunicator} provides Methods for sending and retrieving messages to the raspberry pico. The
+ * communication is thread safe by locking a {@link ReentrantLock} object.
  *
  * @author Philip Hirschle - Initial Contribution
  */
 @NonNullByDefault
 public final class PicoCommunicator {
 
-    private final static EnumMap<CommunicationMessages, Character> messageMap = new EnumMap<>(Map.of(
-            GET_HUMIDITY,               'c',
-            IRRIGATE,                   'c',
-            INITIALIZE,                 'c',
-            DISPOSE,                    'c'
-    ));
+    private static final Logger logger = LoggerFactory.getLogger(PicoCommunicator.class);
+
+    private static final ReentrantLock lock = new ReentrantLock(true);
 
 
     /**
-     * This function will return the message in a suitable format for sending to the raspberry pico via UART. The
-     * message is generated based on the given parameter.
-     * @param message: A member of the {@link CommunicationMessages} enum which represents the kind of message which
-     *               should be generated.
+     * This function will send a message to the raspberry pico and return the answer.
+     * @param message: The message to be sent.
      * @return The message which can be sent to the raspberry pico.
      */
-    public static double sendReceive (CommunicationMessages message) {
-        // TODO: thread safety guaranty here (probably a lock)
+    @Nullable
+    public static ByteBuffer sendReceive (ByteBuffer message) {
+        PicoCommunicator.lock.lock();
+        ByteBuffer res;
         try {
-            return CommunicationParser.parseCommunciation(UARTConnection.getInstance().communicate(messageMap.get(message)));
+            res = UARTConnection.getInstance().communicate(message);
         } catch (UARTConnectionBuildupFailure e) {
-            // TODO: logging , handling
+            logger.error("The message could not be sent or could not be received", e);
         }
-        return 0.0;
+        PicoCommunicator.lock.unlock();
+        return res;            // TODO leeren Buffer!? -> check auf leeren Buffer in CommunicationParser
     }
 
 
+    /**
+     * This method initializes the connection to the raspberry pico.
+     * @return true if the connection is built up successful otherwise false.
+     */
     public static boolean initialize() {
         try {
             UARTConnection.getInstance();
         } catch (UARTConnectionBuildupFailure e) {
-            // TODO: Some logging
             return false;
         }
+        logger.debug("Initializing of the serial connection to the raspberry pico was successful.");
         return true;
     }
 
@@ -205,9 +226,12 @@ public final class PicoCommunicator {
     /**
      * This method has to be called on program end or binding disposal.
      */
-    public static void cleanup() {
-        PicoCommunicator.sendReceive(DISPOSE);
+    public static void cleanup(ByteBuffer message) {
+        PicoCommunicator.lock.lock();
+        PicoCommunicator.sendReceive(message);
         UARTConnection.cleanUp();
+        logger.debug("Cleaning up serial connection to raspberry pico was successful.");
+        PicoCommunicator.lock.unlock();
     }
 }
 
